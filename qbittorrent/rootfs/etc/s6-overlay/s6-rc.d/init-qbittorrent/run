@@ -1,0 +1,116 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Community App: qBittorrent
+# Prepares the profile and applies the settings this app owns
+# ==============================================================================
+readonly CONFIG='/config/qBittorrent/config/qBittorrent.conf'
+
+# Sets a key in the Qt INI file qBittorrent keeps its settings in, adding the
+# section or the key when either is missing.
+#
+# The arguments travel through the environment rather than through "awk -v",
+# because every one of these key names contains a backslash and the assignment
+# form of -v reads those as escape sequences. Blank lines are held back so a
+# key that has to be appended lands against the rest of its section rather than
+# below the gap that separates it from the next one.
+set_config() {
+    local section=${1}
+    local key=${2}
+    local value=${3}
+
+    CONFIG_SECTION="${section}" \
+    CONFIG_KEY="${key}" \
+    CONFIG_VALUE="${value}" \
+        awk '
+            function flush_pending(   i) {
+                for (i = 1; i <= npending; i++) print pending[i]
+                npending = 0
+            }
+            BEGIN {
+                section = ENVIRON["CONFIG_SECTION"]
+                key = ENVIRON["CONFIG_KEY"]
+                value = ENVIRON["CONFIG_VALUE"]
+                current = ""; placed = 0; found_section = 0; npending = 0
+            }
+            /^[ \t]*$/ { pending[++npending] = $0; next }
+            /^\[.*\]$/ {
+                if ((current == section) && !placed) {
+                    print key "=" value; placed = 1
+                }
+                flush_pending()
+                current = substr($0, 2, length($0) - 2)
+                if (current == section) found_section = 1
+                print; next
+            }
+            {
+                flush_pending()
+                if ((current == section) && (index($0, key "=") == 1)) {
+                    if (!placed) { print key "=" value; placed = 1 }
+                    next
+                }
+                print
+            }
+            END {
+                if (placed) { flush_pending(); exit }
+
+                if (found_section) {
+                    print key "=" value
+                    flush_pending()
+                } else {
+                    if (npending > 0) flush_pending()
+                    else if (NR > 0) print ""
+                    print "[" section "]"
+                    print key "=" value
+                }
+            }
+        ' "${CONFIG}" > "${CONFIG}.tmp"
+
+    mv "${CONFIG}.tmp" "${CONFIG}"
+}
+
+mkdir -p /config/qBittorrent/config
+
+if ! bashio::fs.file_exists "${CONFIG}"; then
+    bashio::log.info 'First run! Setting up some folders...'
+
+    mkdir -p \
+        /media/qbittorrent/completed \
+        /media/qbittorrent/incomplete
+
+    touch "${CONFIG}"
+
+    # Left alone, qBittorrent downloads into its own profile, which is this
+    # app's configuration folder and therefore part of every backup. These are
+    # starting values only; where things are saved is settled inside
+    # qBittorrent from here on.
+    set_config 'BitTorrent' 'Session\DefaultSavePath' '/media/qbittorrent/completed'
+    set_config 'BitTorrent' 'Session\TempPath' '/media/qbittorrent/incomplete'
+    set_config 'BitTorrent' 'Session\TempPathEnabled' 'true'
+fi
+
+# The panel opens without a login because qBittorrent is told to skip
+# authentication for clients on loopback, and loopback is where NGINX hands
+# the Ingress requests over from. Anything reaching the published port comes
+# from somewhere else and still meets the login screen.
+#
+# This is applied on every start rather than only on the first one: switching
+# it off in the WebUI would otherwise leave the panel with a login screen and
+# no password to put into it.
+set_config 'Preferences' 'WebUI\LocalHostAuth' 'false'
+
+# qBittorrent keeps a second copy of its log inside the profile. The app log
+# already has every line of it.
+set_config 'Application' 'FileLogger\Enabled' 'false'
+
+# HTTPS covers the published port only. Ingress arrives over loopback, and
+# NGINX is pointed at whichever scheme is in use here.
+bashio::config.require.ssl
+
+if bashio::config.true 'ssl'; then
+    set_config 'Preferences' 'WebUI\HTTPS\Enabled' 'true'
+    set_config 'Preferences' 'WebUI\HTTPS\CertificatePath' "/ssl/$(bashio::config 'certfile')"
+    set_config 'Preferences' 'WebUI\HTTPS\KeyPath' "/ssl/$(bashio::config 'keyfile')"
+else
+    set_config 'Preferences' 'WebUI\HTTPS\Enabled' 'false'
+fi

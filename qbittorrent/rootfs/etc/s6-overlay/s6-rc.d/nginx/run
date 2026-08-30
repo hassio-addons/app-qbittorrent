@@ -1,0 +1,14 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Community App: qBittorrent
+# Runs the NGINX daemon
+# ==============================================================================
+
+# Wait for qBittorrent to become available. Rechecking the files of a large
+# collection of torrents can hold up the WebUI for a while on the first start
+# after an unclean shutdown.
+bashio::net.wait_for 8080 127.0.0.1 900
+
+bashio::log.info 'Starting NGINX...'
+exec nginx

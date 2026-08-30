@@ -1,0 +1,18 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Community App: qBittorrent
+# Runs qBittorrent
+# ==============================================================================
+
+bashio::log.info 'Starting qBittorrent...'
+
+# The port options are passed on the command line rather than left in the
+# configuration file, so that the WebUI port keeps matching what NGINX proxies
+# to and the incoming port keeps matching what the container publishes, no
+# matter what gets changed inside qBittorrent.
+exec qbittorrent-nox \
+    --profile=/config \
+    --webui-port=8080 \
+    --torrenting-port=6881 \
+    --confirm-legal-notice

@@ -1,0 +1,24 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Community App: qBittorrent
+# Configures NGINX for use with qBittorrent
+# ==============================================================================
+declare protocol
+
+# NGINX reaches qBittorrent over loopback, and qBittorrent answers there with
+# whatever its WebUI is set to serve. Turning on SSL for the published port
+# therefore changes the scheme on this side of the proxy as well.
+protocol='http'
+if bashio::config.true 'ssl'; then
+    protocol='https'
+fi
+
+# Generate Ingress configuration
+bashio::var.json \
+    interface "$(bashio::app.ip_address)" \
+    port "^$(bashio::app.ingress_port)" \
+    protocol "${protocol}" \
+    | tempio \
+        -template /etc/nginx/templates/ingress.gtpl \
+        -out /etc/nginx/servers/ingress.conf
