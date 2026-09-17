@@ -46,4 +46,26 @@ server {
         # nothing else in the responses needs rewriting.
         proxy_pass {{ .protocol }}://backend;
     }
+
+    # The panels under views/ (preferences, RSS, search, log, about, and so
+    # on) are not framed at all. MochaUI fetches them over XHR and injects
+    # their markup and scripts straight into the main window, so when they
+    # reach for "window.parent" they mean the main window itself, which is
+    # what "parent" is when nothing frames it. Inside Ingress that is Home
+    # Assistant instead, and saving the preferences, listing RSS feeds and
+    # opening the about page all fail on an undefined qBittorrent object.
+    # Since every one of them runs in the main window, "window." is the
+    # correct target throughout; that also keeps the reload after saving the
+    # preferences on the WebUI instead of on Home Assistant as a whole.
+    #
+    # Declaring sub_filter here replaces the set inherited from the server
+    # block, which is fine: those patch scripts that live outside views/.
+    location /views/ {
+        allow   172.30.32.2;
+        deny    all;
+
+        sub_filter 'window.parent.' 'window.';
+
+        proxy_pass {{ .protocol }}://backend;
+    }
 }
