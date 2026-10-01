@@ -9,7 +9,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN \
   apk add --no-cache \
     nginx=1.30.4-r1 \
-    python3=3.14.7-r1 \
+    python3=3.14.8-r0 \
     qbittorrent-nox=5.2.1-r0 \
     qt6-qtbase-sqlite=6.11.1-r0 \
     qt6-qtbase=6.11.1-r0 \
